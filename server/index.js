@@ -25,7 +25,7 @@ app.use(express.json())
 
 // DeepSeek 客户端（兼容 OpenAI SDK）
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.CLAUDE_API_KEY
-const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat'
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash'
 
 const deepseek = new OpenAI({
   apiKey: DEEPSEEK_API_KEY,
