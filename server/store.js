@@ -41,7 +41,7 @@ async function getDb() {
   } else if (TURSO_DB_URL && TURSO_DB_TOKEN) {
     console.log('[DB] 使用 Turso 远程数据库')
     db = createClient({ url: TURSO_DB_URL, authToken: TURSO_DB_TOKEN })
-    await db.exec(`
+    await db.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
@@ -58,7 +58,7 @@ async function getDb() {
       fs.mkdirSync(DATA_DIR, { recursive: true })
     }
     db = createClient({ url: `file:${path.join(DATA_DIR, 'app.db')}` })
-    await db.exec(`
+    await db.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
