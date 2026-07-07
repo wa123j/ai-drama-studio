@@ -67,7 +67,7 @@ export default function TopUpPage({ user, onUserUpdate }) {
               </div>
               <div className="flex items-start gap-3">
                 <span className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">2</span>
-                <span>发送 <strong>「{selected.name}」</strong>（{selected.price}）</span>
+                <span>微信扫码支付 <strong>「{selected.name}」</strong>（{selected.price}）</span>
               </div>
               <div className="flex items-start gap-3">
                 <span className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">3</span>
@@ -82,16 +82,27 @@ export default function TopUpPage({ user, onUserUpdate }) {
               </div>
             </div>
 
-            {/* 右侧二维码占位 */}
+            {/* 右侧收款码 */}
             <div className="text-center">
-              <div className="w-48 h-48 bg-slate-100 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center">
-                <div className="text-center text-slate-400">
-                  <div className="text-4xl mb-2">💬</div>
-                  <span className="text-xs">微信二维码</span>
+              <div className="w-48 h-48 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                <img
+                  src="/wechat-qr.jpg"
+                  alt="微信收款码"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none'
+                    e.target.nextSibling.style.display = 'flex'
+                  }}
+                />
+                <div className="w-full h-full bg-slate-100 hidden items-center justify-center">
+                  <div className="text-center text-slate-400">
+                    <div className="text-4xl mb-2">💬</div>
+                    <span className="text-xs">微信收款码</span>
+                  </div>
                 </div>
               </div>
-              <p className="text-xs text-slate-400 mt-2">请替换为你的微信收款码</p>
-              <p className="text-xs text-slate-400">微信号：<strong>your_wechat_id</strong></p>
+              <p className="text-xs text-slate-400 mt-2">微信扫码支付</p>
+              <p className="text-xs text-slate-400">微信号：<strong>wa123j</strong></p>
             </div>
           </div>
         </div>
