@@ -2,11 +2,13 @@ import fs from 'fs'
 import { createClient } from '@libsql/client'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import pg from 'pg'
 
+const { Pool } = pg
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(__dirname, '..', 'data')
 
-// 远程数据库配置（Railway PostgreSQL 或 Turso）
+// 数据库优先级：Railway PostgreSQL > Turso > 本地 SQLite
 const DATABASE_URL = process.env.DATABASE_URL
 const TURSO_DB_URL = process.env.TURSO_DB_URL
 const TURSO_DB_TOKEN = process.env.TURSO_DB_TOKEN
@@ -17,10 +19,9 @@ async function getDb() {
   if (db) return db
 
   if (DATABASE_URL) {
-    // Railway 自带 PostgreSQL
-    const { default: postgres } = await import('postgres')
-    const sql = postgres(DATABASE_URL)
-    await sql`
+    console.log('[DB] 使用 Railway PostgreSQL')
+    const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } })
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
@@ -30,9 +31,13 @@ async function getDb() {
         is_admin INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW()
       )
-    `
-    db = { _type: 'pg', sql }
+    `)
+    // 测试连接
+    await pool.query('SELECT 1')
+    console.log('[DB] PostgreSQL 连接成功')
+    db = { _type: 'pg', pool }
   } else if (TURSO_DB_URL && TURSO_DB_TOKEN) {
+    console.log('[DB] 使用 Turso 远程数据库')
     db = createClient({ url: TURSO_DB_URL, authToken: TURSO_DB_TOKEN })
     await db.exec(`
       CREATE TABLE IF NOT EXISTS users (
@@ -46,7 +51,7 @@ async function getDb() {
       )
     `)
   } else {
-    // 本地 SQLite 文件
+    console.log('[DB] 使用本地 SQLite')
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true })
     }
@@ -72,86 +77,78 @@ function rowToUser(row) {
   return {
     id: row.id,
     username: row.username,
-    passwordHash: row.password_hash || row.passwordHash,
-    totalEpisodes: row.total_episodes ?? row.totalEpisodes ?? 0,
-    paidExtraEpisodes: row.paid_extra_episodes ?? row.paidExtraEpisodes ?? 0,
-    isAdmin: !!(row.is_admin ?? row.isAdmin ?? false),
-    createdAt: row.created_at || row.createdAt
+    passwordHash: row.password_hash,
+    totalEpisodes: Number(row.total_episodes ?? 0),
+    paidExtraEpisodes: Number(row.paid_extra_episodes ?? 0),
+    isAdmin: !!row.is_admin,
+    createdAt: row.created_at
+  }
+}
+
+async function query(sql, args = []) {
+  const conn = await getDb()
+  if (conn._type === 'pg') {
+    // PostgreSQL: 用 $1, $2 参数化查询
+    let idx = 0
+    const pgSql = sql.replace(/\?/g, () => `$${++idx}`)
+    const result = await conn.pool.query(pgSql, args)
+    return result.rows
+  } else {
+    // SQLite: 用 ? 参数化查询
+    const result = await conn.execute({ sql, args })
+    return result.rows
+  }
+}
+
+async function run(sql, args = []) {
+  const conn = await getDb()
+  if (conn._type === 'pg') {
+    let idx = 0
+    const pgSql = sql.replace(/\?/g, () => `$${++idx}`)
+    await conn.pool.query(pgSql, args)
+  } else {
+    await conn.execute({ sql, args })
   }
 }
 
 export async function findByUsername(username) {
-  const conn = await getDb()
-  if (conn._type === 'pg') {
-    const rows = await conn.sql`SELECT * FROM users WHERE username = ${username}`
-    return rowToUser(rows[0])
-  }
-  const result = await conn.execute({ sql: 'SELECT * FROM users WHERE username = ?', args: [username] })
-  return rowToUser(result.rows[0])
+  return rowToUser((await query('SELECT * FROM users WHERE username = ?', [username]))[0])
 }
 
 export async function findById(id) {
-  const conn = await getDb()
-  if (conn._type === 'pg') {
-    const rows = await conn.sql`SELECT * FROM users WHERE id = ${id}`
-    return rowToUser(rows[0])
-  }
-  const result = await conn.execute({ sql: 'SELECT * FROM users WHERE id = ?', args: [id] })
-  return rowToUser(result.rows[0])
+  return rowToUser((await query('SELECT * FROM users WHERE id = ?', [id]))[0])
 }
 
 export async function createUser({ username, passwordHash, isAdmin = false }) {
-  const conn = await getDb()
   const id = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-
-  if (conn._type === 'pg') {
-    await conn.sql`
-      INSERT INTO users (id, username, password_hash, is_admin, total_episodes, paid_extra_episodes, created_at)
-      VALUES (${id}, ${username}, ${passwordHash}, ${isAdmin ? 1 : 0}, 0, 0, NOW())
-    `
+  if ((await getDb())._type === 'pg') {
+    await run(
+      "INSERT INTO users (id, username, password_hash, is_admin, total_episodes, paid_extra_episodes, created_at) VALUES (?, ?, ?, ?, 0, 0, NOW())",
+      [id, username, passwordHash, isAdmin ? 1 : 0]
+    )
   } else {
-    await conn.execute({
-      sql: "INSERT INTO users (id, username, password_hash, is_admin, total_episodes, paid_extra_episodes, created_at) VALUES (?, ?, ?, ?, 0, 0, datetime('now'))",
-      args: [id, username, passwordHash, isAdmin ? 1 : 0]
-    })
+    await run(
+      "INSERT INTO users (id, username, password_hash, is_admin, total_episodes, paid_extra_episodes, created_at) VALUES (?, ?, ?, ?, 0, 0, datetime('now'))",
+      [id, username, passwordHash, isAdmin ? 1 : 0]
+    )
   }
-
   return findById(id)
 }
 
 export async function incrementEpisodes(id, count = 1) {
-  const conn = await getDb()
-  if (conn._type === 'pg') {
-    await conn.sql`UPDATE users SET total_episodes = total_episodes + ${count} WHERE id = ${id}`
-  } else {
-    await conn.execute({ sql: 'UPDATE users SET total_episodes = total_episodes + ? WHERE id = ?', args: [count, id] })
-  }
+  await run('UPDATE users SET total_episodes = total_episodes + ? WHERE id = ?', [count, id])
   return true
 }
 
 export async function addPaidEpisodes(id, extraCount) {
-  const conn = await getDb()
-  if (conn._type === 'pg') {
-    await conn.sql`UPDATE users SET paid_extra_episodes = paid_extra_episodes + ${extraCount} WHERE id = ${id}`
-  } else {
-    await conn.execute({ sql: 'UPDATE users SET paid_extra_episodes = paid_extra_episodes + ? WHERE id = ?', args: [extraCount, id] })
-  }
+  await run('UPDATE users SET paid_extra_episodes = paid_extra_episodes + ? WHERE id = ?', [extraCount, id])
   return true
 }
 
 export function getRemainingEpisodes(user) {
-  const freeLimit = 10
-  const used = user.totalEpisodes
-  const paid = user.paidExtraEpisodes
-  return Math.max(0, freeLimit + paid - used)
+  return Math.max(0, 10 + (user.paidExtraEpisodes || 0) - (user.totalEpisodes || 0))
 }
 
 export async function getAllUsers() {
-  const conn = await getDb()
-  if (conn._type === 'pg') {
-    const rows = await conn.sql`SELECT * FROM users ORDER BY created_at DESC`
-    return rows.map(rowToUser)
-  }
-  const result = await conn.execute('SELECT * FROM users ORDER BY created_at DESC')
-  return result.rows.map(rowToUser)
+  return (await query('SELECT * FROM users ORDER BY created_at DESC')).map(rowToUser)
 }
