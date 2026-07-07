@@ -19,23 +19,28 @@ async function getDb() {
   if (db) return db
 
   if (DATABASE_URL) {
-    console.log('[DB] 使用 Railway PostgreSQL')
-    const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } })
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        total_episodes INTEGER DEFAULT 0,
-        paid_extra_episodes INTEGER DEFAULT 0,
-        is_admin INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `)
-    // 测试连接
-    await pool.query('SELECT 1')
-    console.log('[DB] PostgreSQL 连接成功')
-    db = { _type: 'pg', pool }
+    console.log('[DB] 尝试连接 Railway PostgreSQL...')
+    try {
+      const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } })
+      // 测试连接
+      await pool.query('SELECT 1')
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          username TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          total_episodes INTEGER DEFAULT 0,
+          paid_extra_episodes INTEGER DEFAULT 0,
+          is_admin INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `)
+      console.log('[DB] PostgreSQL 连接成功')
+      db = { _type: 'pg', pool }
+    } catch (pgErr) {
+      console.error('[DB] PostgreSQL 连接失败，回退到本地 SQLite:', pgErr.message)
+      // 回退到 SQLite
+    }
   } else if (TURSO_DB_URL && TURSO_DB_TOKEN) {
     console.log('[DB] 使用 Turso 远程数据库')
     db = createClient({ url: TURSO_DB_URL, authToken: TURSO_DB_TOKEN })
