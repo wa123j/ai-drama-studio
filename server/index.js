@@ -128,7 +128,7 @@ app.post('/api/auth/register', async (req, res) => {
     })
   } catch (error) {
     console.error('注册失败:', error)
-    res.status(500).json({ error: '注册失败' })
+    res.status(500).json({ error: '注册失败: ' + (error.message || '未知错误') })
   }
 })
 
@@ -164,7 +164,7 @@ app.post('/api/auth/login', async (req, res) => {
     })
   } catch (error) {
     console.error('登录失败:', error)
-    res.status(500).json({ error: '登录失败' })
+    res.status(500).json({ error: '登录失败: ' + (error.message || '未知错误') })
   }
 })
 

@@ -2,9 +2,7 @@ import fs from 'fs'
 import { createClient } from '@libsql/client'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import pg from 'pg'
 
-const { Pool } = pg
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(__dirname, '..', 'data')
 
@@ -21,8 +19,8 @@ async function getDb() {
   if (DATABASE_URL) {
     console.log('[DB] 尝试连接 Railway PostgreSQL...')
     try {
-      const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } })
-      // 测试连接
+      const { default: pg } = await import('pg')
+      const pool = new pg.Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } })
       await pool.query('SELECT 1')
       await pool.query(`
         CREATE TABLE IF NOT EXISTS users (
@@ -39,7 +37,6 @@ async function getDb() {
       db = { _type: 'pg', pool }
     } catch (pgErr) {
       console.error('[DB] PostgreSQL 连接失败，回退到本地 SQLite:', pgErr.message)
-      // 回退到 SQLite
     }
   } else if (TURSO_DB_URL && TURSO_DB_TOKEN) {
     console.log('[DB] 使用 Turso 远程数据库')
