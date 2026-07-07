@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite",
     "dev:server": "node server/index.js",
@@ -32,3 +35,4 @@
     "vite": "^8.1.1"
   }
 }
+
