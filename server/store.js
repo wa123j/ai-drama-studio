@@ -16,7 +16,9 @@ async function getDb() {
     fs.mkdirSync(DATA_DIR, { recursive: true })
   }
 
-  const SQL = await initSqlJs()
+  const SQL = await initSqlJs({
+    locateFile: file => path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', file)
+  })
 
   // 如果已有数据库文件，加载它
   if (fs.existsSync(DB_PATH)) {

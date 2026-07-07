@@ -130,22 +130,27 @@ app.post('/api/auth/login', async (req, res) => {
 })
 
 // 获取当前用户信息
-app.get('/api/auth/me', authMiddleware, (req, res) => {
-  const user = await findById(req.user.id)
-  if (!user) {
-    return res.status(404).json({ error: '用户不存在' })
-  }
-  res.json({
-    success: true,
-    user: {
-      id: user.id,
-      username: user.username,
-      isAdmin: user.isAdmin,
-      totalEpisodes: user.totalEpisodes,
-      paidExtraEpisodes: user.paidExtraEpisodes,
-      remainingEpisodes: getRemainingEpisodes(user)
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await findById(req.user.id)
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' })
     }
-  })
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        isAdmin: user.isAdmin,
+        totalEpisodes: user.totalEpisodes,
+        paidExtraEpisodes: user.paidExtraEpisodes,
+        remainingEpisodes: getRemainingEpisodes(user)
+      }
+    })
+  } catch (err) {
+    console.error('获取用户信息失败:', err)
+    res.status(500).json({ error: '获取用户信息失败' })
+  }
 })
 
 // ========================================
@@ -174,18 +179,23 @@ app.post('/api/admin/add-episodes', authMiddleware, adminMiddleware, async (req,
 })
 
 // 管理员获取用户列表
-app.get('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
-  const users = await getAllUsers()
-  const list = users.map(u => ({
-    id: u.id,
-    username: u.username,
-    isAdmin: u.isAdmin,
-    totalEpisodes: u.totalEpisodes,
-    paidExtraEpisodes: u.paidExtraEpisodes,
-    remainingEpisodes: getRemainingEpisodes(u),
-    createdAt: u.createdAt
-  }))
-  res.json({ success: true, users: list })
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const users = await getAllUsers()
+    const list = users.map(u => ({
+      id: u.id,
+      username: u.username,
+      isAdmin: u.isAdmin,
+      totalEpisodes: u.totalEpisodes,
+      paidExtraEpisodes: u.paidExtraEpisodes,
+      remainingEpisodes: getRemainingEpisodes(u),
+      createdAt: u.createdAt
+    }))
+    res.json({ success: true, users: list })
+  } catch (err) {
+    console.error('获取用户列表失败:', err)
+    res.status(500).json({ error: '获取用户列表失败' })
+  }
 })
 
 // ========================================
@@ -355,6 +365,15 @@ app.get('/{*path}', (req, res) => {
 // 启动服务
 // ========================================
 const PORT = process.env.PORT || 3001
+
+// 全局错误保护，防止崩溃
+process.on('uncaughtException', (err) => {
+  console.error('未捕获异常:', err)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('未捕获的Promise拒绝:', reason)
+})
+
 app.listen(PORT, () => {
   console.log(`AI短剧工坊 API 服务运行在 http://localhost:${PORT}`)
 })
