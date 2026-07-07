@@ -63,15 +63,15 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ error: '密码至少4位' })
     }
 
-    const existing = findByUsername(username)
+    const existing = await findByUsername(username)
     if (existing) {
       return res.status(400).json({ error: '用户名已存在' })
     }
 
     const passwordHash = await hashPassword(password)
     // 第一个注册用户自动成为管理员
-    const isAdmin = findByUsername('admin') === null && username === 'admin'
-    const user = createUser({ username, passwordHash, isAdmin })
+    const isAdmin = await findByUsername('admin') === null && username === 'admin'
+    const user = await createUser({ username, passwordHash, isAdmin })
 
     const token = generateToken(user)
     res.json({
@@ -100,7 +100,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: '请输入用户名和密码' })
     }
 
-    const user = findByUsername(username)
+    const user = await findByUsername(username)
     if (!user) {
       return res.status(400).json({ error: '用户名或密码错误' })
     }
@@ -131,7 +131,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 获取当前用户信息
 app.get('/api/auth/me', authMiddleware, (req, res) => {
-  const user = findById(req.user.id)
+  const user = await findById(req.user.id)
   if (!user) {
     return res.status(404).json({ error: '用户不存在' })
   }
@@ -160,12 +160,12 @@ app.post('/api/admin/add-episodes', authMiddleware, adminMiddleware, async (req,
       return res.status(400).json({ error: '参数错误' })
     }
 
-    const user = findByUsername(username)
+    const user = await findByUsername(username)
     if (!user) {
       return res.status(404).json({ error: '用户不存在' })
     }
 
-    addPaidEpisodes(user.id, extraCount)
+    await addPaidEpisodes(user.id, extraCount)
     res.json({ success: true, message: `已为 ${username} 增加 ${extraCount} 集额度` })
   } catch (error) {
     console.error('加额度失败:', error)
@@ -175,7 +175,7 @@ app.post('/api/admin/add-episodes', authMiddleware, adminMiddleware, async (req,
 
 // 管理员获取用户列表
 app.get('/api/admin/users', authMiddleware, adminMiddleware, (req, res) => {
-  const users = getAllUsers()
+  const users = await getAllUsers()
   const list = users.map(u => ({
     id: u.id,
     username: u.username,
@@ -207,13 +207,13 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
 
     // 检查并扣除额度
     const episodeCount = parseInt(episodes) || 10
-    const user = findById(req.user.id)
+    const user = await findById(req.user.id)
     if (!user) return res.status(404).json({ error: '用户不存在' })
     const remaining = getRemainingEpisodes(user)
     if (remaining < episodeCount) {
       return res.status(403).json({ error: `额度不足，需要 ${episodeCount} 集，剩余 ${Math.max(0, remaining)} 集`, remainingEpisodes: Math.max(0, remaining), needPayment: true })
     }
-    incrementEpisodes(req.user.id, episodeCount)
+    await incrementEpisodes(req.user.id, episodeCount)
 
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
@@ -262,13 +262,13 @@ app.post('/api/generate/framework', authMiddleware, async (req, res) => {
 
     // 检查并扣除总额度（逐集生成不再扣费）
     const episodeCount = parseInt(episodes) || 10
-    const user = findById(req.user.id)
+    const user = await findById(req.user.id)
     if (!user) return res.status(404).json({ error: '用户不存在' })
     const remaining = getRemainingEpisodes(user)
     if (remaining < episodeCount) {
       return res.status(403).json({ error: `额度不足，需要 ${episodeCount} 集，剩余 ${Math.max(0, remaining)} 集`, remainingEpisodes: Math.max(0, remaining), needPayment: true })
     }
-    incrementEpisodes(req.user.id, episodeCount)
+    await incrementEpisodes(req.user.id, episodeCount)
 
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-5-20251001',
