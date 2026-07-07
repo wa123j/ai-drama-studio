@@ -3,7 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import {
   buildSystemPrompt,
   buildUserPrompt,
@@ -23,7 +23,14 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY })
+// DeepSeek 客户端（兼容 OpenAI SDK）
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || process.env.CLAUDE_API_KEY
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat'
+
+const deepseek = new OpenAI({
+  apiKey: DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com'
+})
 
 // ========================================
 // 静态文件（前端构建产物）
@@ -34,22 +41,56 @@ app.use(express.static(distPath))
 // ========================================
 // 工具函数
 // ========================================
-function extractText(content) {
-  for (const block of content) {
-    if (block.type === 'text') return block.text
-  }
-  return content[0]?.text || ''
+function extractText(completion) {
+  return completion.choices?.[0]?.message?.content || ''
 }
 
 function checkApiKey() {
-  return process.env.CLAUDE_API_KEY && process.env.CLAUDE_API_KEY !== 'your-api-key-here'
+  return DEEPSEEK_API_KEY && DEEPSEEK_API_KEY !== 'your-api-key-here' && DEEPSEEK_API_KEY !== 'sk-your-deepseek-key'
+}
+
+/**
+ * 通用的 DeepSeek 流式调用（一次性生成用）
+ */
+async function* streamDeepSeek(systemPrompt, userPrompt) {
+  const stream = await deepseek.chat.completions.create({
+    model: DEEPSEEK_MODEL,
+    max_tokens: 32000,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    stream: true
+  })
+
+  for await (const chunk of stream) {
+    const content = chunk.choices?.[0]?.delta?.content
+    if (content) {
+      yield content
+    }
+  }
+}
+
+/**
+ * 通用的 DeepSeek 非流式调用（框架/单集生成用）
+ */
+async function callDeepSeek(systemPrompt, userPrompt, maxTokens = 4000) {
+  const completion = await deepseek.chat.completions.create({
+    model: DEEPSEEK_MODEL,
+    max_tokens: maxTokens,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]
+  })
+
+  return extractText(completion)
 }
 
 // ========================================
 // 认证路由
 // ========================================
 
-// 注册
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, password } = req.body
@@ -69,7 +110,6 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const passwordHash = await hashPassword(password)
-    // 第一个注册用户自动成为管理员
     const isAdmin = await findByUsername('admin') === null && username === 'admin'
     const user = await createUser({ username, passwordHash, isAdmin })
 
@@ -92,7 +132,6 @@ app.post('/api/auth/register', async (req, res) => {
   }
 })
 
-// 登录
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body
@@ -129,7 +168,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
-// 获取当前用户信息
 app.get('/api/auth/me', authMiddleware, async (req, res) => {
   try {
     const user = await findById(req.user.id)
@@ -157,7 +195,6 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 // 管理员路由
 // ========================================
 
-// 管理员给用户加额度
 app.post('/api/admin/add-episodes', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { username, extraCount } = req.body
@@ -178,7 +215,6 @@ app.post('/api/admin/add-episodes', authMiddleware, adminMiddleware, async (req,
   }
 })
 
-// 管理员获取用户列表
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const users = await getAllUsers()
@@ -202,7 +238,7 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
 // 生成接口（需要登录）
 // ========================================
 
-// 一次性生成（需要登录 + 扣总额度）
+// 一次性生成（流式输出）
 app.post('/api/generate', authMiddleware, async (req, res) => {
   try {
     const { genre, theme, episodes, protagonist, extras } = req.body
@@ -212,10 +248,9 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
     }
 
     if (!checkApiKey()) {
-      return res.status(400).json({ error: '请先配置CLAUDE_API_KEY环境变量' })
+      return res.status(400).json({ error: '请先配置 DEEPSEEK_API_KEY 环境变量' })
     }
 
-    // 检查并扣除额度
     const episodeCount = parseInt(episodes) || 10
     const user = await findById(req.user.id)
     if (!user) return res.status(404).json({ error: '用户不存在' })
@@ -229,20 +264,23 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
 
-    const stream = await anthropic.messages.create({
-      model: 'claude-sonnet-5-20251001',
+    const systemPrompt = buildSystemPrompt()
+    const userPrompt = buildUserPrompt({ genre, theme, episodes, protagonist, extras })
+
+    const stream = await deepseek.chat.completions.create({
+      model: DEEPSEEK_MODEL,
       max_tokens: 32000,
-      system: buildSystemPrompt(),
-      messages: [{
-        role: 'user',
-        content: buildUserPrompt({ genre, theme, episodes, protagonist, extras })
-      }],
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
       stream: true
     })
 
     for await (const chunk of stream) {
-      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-        res.write(chunk.delta.text)
+      const content = chunk.choices?.[0]?.delta?.content
+      if (content) {
+        res.write(content)
       }
     }
 
@@ -257,7 +295,7 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
   }
 })
 
-// 生成框架（需要登录 + 扣总额度）
+// 生成框架
 app.post('/api/generate/framework', authMiddleware, async (req, res) => {
   try {
     const { genre, theme, episodes, protagonist, extras } = req.body
@@ -267,10 +305,9 @@ app.post('/api/generate/framework', authMiddleware, async (req, res) => {
     }
 
     if (!checkApiKey()) {
-      return res.status(400).json({ error: '请先配置CLAUDE_API_KEY环境变量' })
+      return res.status(400).json({ error: '请先配置 DEEPSEEK_API_KEY 环境变量' })
     }
 
-    // 检查并扣除总额度（逐集生成不再扣费）
     const episodeCount = parseInt(episodes) || 10
     const user = await findById(req.user.id)
     if (!user) return res.status(404).json({ error: '用户不存在' })
@@ -280,17 +317,11 @@ app.post('/api/generate/framework', authMiddleware, async (req, res) => {
     }
     await incrementEpisodes(req.user.id, episodeCount)
 
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-5-20251001',
-      max_tokens: 4000,
-      system: buildFrameworkSystemPrompt(),
-      messages: [{
-        role: 'user',
-        content: buildFrameworkUserPrompt({ genre, theme, episodes, protagonist, extras })
-      }]
-    })
+    const text = await callDeepSeek(
+      buildFrameworkSystemPrompt(),
+      buildFrameworkUserPrompt({ genre, theme, episodes, protagonist, extras })
+    )
 
-    const text = extractText(msg.content)
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       return res.status(500).json({ error: 'AI返回格式异常，请重试' })
@@ -310,7 +341,7 @@ app.post('/api/generate/framework', authMiddleware, async (req, res) => {
   }
 })
 
-// 生成单集（只需登录，额度已在框架接口扣除）
+// 生成单集
 app.post('/api/generate/episode', authMiddleware, async (req, res) => {
   try {
     const { framework, episodeNumber, totalEpisodes } = req.body
@@ -320,20 +351,14 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
     }
 
     if (!checkApiKey()) {
-      return res.status(400).json({ error: '请先配置CLAUDE_API_KEY环境变量' })
+      return res.status(400).json({ error: '请先配置 DEEPSEEK_API_KEY 环境变量' })
     }
 
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-5-20251001',
-      max_tokens: 4000,
-      system: buildEpisodeSystemPrompt(),
-      messages: [{
-        role: 'user',
-        content: buildEpisodeUserPrompt(framework, episodeNumber, totalEpisodes || framework.episodes?.length)
-      }]
-    })
+    const text = await callDeepSeek(
+      buildEpisodeSystemPrompt(),
+      buildEpisodeUserPrompt(framework, episodeNumber, totalEpisodes || framework.episodes?.length)
+    )
 
-    const text = extractText(msg.content)
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       return res.status(500).json({ error: 'AI返回格式异常，请重试' })
@@ -353,7 +378,6 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
 // ========================================
 // 前端路由回退（SPA）
 // ========================================
-// 前端路由回退（SPA）- 仅非API路径
 app.get('/{*path}', (req, res) => {
   if (req.params.path && req.params.path.startsWith('api/')) {
     return res.status(404).json({ error: 'Not found' })
@@ -366,7 +390,6 @@ app.get('/{*path}', (req, res) => {
 // ========================================
 const PORT = process.env.PORT || 3001
 
-// 全局错误保护，防止崩溃
 process.on('uncaughtException', (err) => {
   console.error('未捕获异常:', err)
 })
