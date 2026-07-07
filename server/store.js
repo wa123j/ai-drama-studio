@@ -1,35 +1,35 @@
 import fs from 'fs'
-import initSqlJs from 'sql.js'
+import { createClient } from '@libsql/client'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(__dirname, '..', 'data')
-const DB_PATH = path.join(DATA_DIR, 'app.db')
 
-let db = null
+// Railway 上用远程 Turso 数据库，本地开发用 SQLite 文件
+const TURSO_DB_URL = process.env.TURSO_DB_URL
+const TURSO_DB_TOKEN = process.env.TURSO_DB_TOKEN
+
+let db
 
 async function getDb() {
   if (db) return db
 
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true })
-  }
-
-  const SQL = await initSqlJs({
-    locateFile: file => path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', file)
-  })
-
-  // 如果已有数据库文件，加载它
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH)
-    db = new SQL.Database(buffer)
+  if (TURSO_DB_URL && TURSO_DB_TOKEN) {
+    db = createClient({
+      url: TURSO_DB_URL,
+      authToken: TURSO_DB_TOKEN
+    })
   } else {
-    db = new SQL.Database()
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true })
+    }
+    db = createClient({
+      url: `file:${path.join(DATA_DIR, 'app.db')}`
+    })
   }
 
-  // 建表
-  db.run(`
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
@@ -41,31 +41,7 @@ async function getDb() {
     )
   `)
 
-  saveDb()
   return db
-}
-
-function saveDb() {
-  if (!db) return
-  const data = db.export()
-  const buffer = Buffer.from(data)
-  fs.writeFileSync(DB_PATH, buffer)
-}
-
-function queryAll(sql, params = []) {
-  const stmt = db.prepare(sql)
-  stmt.bind(params)
-  const rows = []
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject())
-  }
-  stmt.free()
-  return rows
-}
-
-function queryOne(sql, params = []) {
-  const rows = queryAll(sql, params)
-  return rows.length > 0 ? rows[0] : null
 }
 
 function rowToUser(row) {
@@ -82,37 +58,42 @@ function rowToUser(row) {
 }
 
 export async function findByUsername(username) {
-  await getDb()
-  return rowToUser(queryOne('SELECT * FROM users WHERE username = ?', [username]))
+  const db = await getDb()
+  const result = await db.execute({ sql: 'SELECT * FROM users WHERE username = ?', args: [username] })
+  return rowToUser(result.rows[0])
 }
 
 export async function findById(id) {
-  await getDb()
-  return rowToUser(queryOne('SELECT * FROM users WHERE id = ?', [id]))
+  const db = await getDb()
+  const result = await db.execute({ sql: 'SELECT * FROM users WHERE id = ?', args: [id] })
+  return rowToUser(result.rows[0])
 }
 
 export async function createUser({ username, passwordHash, isAdmin = false }) {
-  await getDb()
+  const db = await getDb()
   const id = 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-  db.run(
-    'INSERT INTO users (id, username, password_hash, is_admin, total_episodes, paid_extra_episodes, created_at) VALUES (?, ?, ?, ?, 0, 0, datetime(\'now\'))',
-    [id, username, passwordHash, isAdmin ? 1 : 0]
-  )
-  saveDb()
+  await db.execute({
+    sql: "INSERT INTO users (id, username, password_hash, is_admin, total_episodes, paid_extra_episodes, created_at) VALUES (?, ?, ?, ?, 0, 0, datetime('now'))",
+    args: [id, username, passwordHash, isAdmin ? 1 : 0]
+  })
   return findById(id)
 }
 
 export async function incrementEpisodes(id, count = 1) {
-  await getDb()
-  db.run('UPDATE users SET total_episodes = total_episodes + ? WHERE id = ?', [count, id])
-  saveDb()
+  const db = await getDb()
+  await db.execute({
+    sql: 'UPDATE users SET total_episodes = total_episodes + ? WHERE id = ?',
+    args: [count, id]
+  })
   return true
 }
 
 export async function addPaidEpisodes(id, extraCount) {
-  await getDb()
-  db.run('UPDATE users SET paid_extra_episodes = paid_extra_episodes + ? WHERE id = ?', [extraCount, id])
-  saveDb()
+  const db = await getDb()
+  await db.execute({
+    sql: 'UPDATE users SET paid_extra_episodes = paid_extra_episodes + ? WHERE id = ?',
+    args: [extraCount, id]
+  })
   return true
 }
 
@@ -124,7 +105,7 @@ export function getRemainingEpisodes(user) {
 }
 
 export async function getAllUsers() {
-  await getDb()
-  const rows = queryAll('SELECT * FROM users ORDER BY created_at DESC')
-  return rows.map(rowToUser)
+  const db = await getDb()
+  const result = await db.execute('SELECT * FROM users ORDER BY created_at DESC')
+  return result.rows.map(rowToUser)
 }
