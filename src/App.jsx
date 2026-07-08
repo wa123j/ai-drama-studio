@@ -12,7 +12,7 @@ import TopUpPage from './components/TopUpPage.jsx'
 import AdminPage from './components/AdminPage.jsx'
 import { generateFramework, generateEpisode, abortGenerate } from './utils/api.js'
 import { parseScriptResult } from './utils/export.js'
-import { saveToHistory } from './utils/history.js'
+import { saveToHistory, isScriptComplete, getIncompleteCount } from './utils/history.js'
 import { getToken, getUser, clearAuth, refreshUserInfo } from './utils/auth.js'
 
 const EPISODE_TIMEOUT = 45_000
@@ -314,6 +314,110 @@ function App() {
     abortRef.current = null
   }, [])
 
+  /** 继续生成未完成的剧本 */
+  const handleContinueGenerate = useCallback(async (existingResult) => {
+    if (!user) {
+      setPage('login')
+      return
+    }
+
+    const richResult = JSON.parse(JSON.stringify(existingResult)) // 深拷贝
+
+    setLoading(true)
+    setError('')
+    setFailedEpisodes([])
+    setPhase('episodes')
+    setPage('result')
+
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    resultRef.current = richResult
+    setResult({ ...richResult })
+
+    // 检查剩余额度：需要生成长度 > 50 的集数 = 未完成的集数
+    const total = richResult.episodes.length
+    const incompleteCount = getIncompleteCount(richResult)
+    const freshUser = await refreshUserInfo()
+    if (freshUser) setUser(freshUser)
+
+    if (incompleteCount > 0 && (freshUser?.remainingEpisodes ?? 0) < incompleteCount) {
+      setError(`额度不足，需要 ${incompleteCount} 集额度，剩余 ${Math.max(0, freshUser?.remainingEpisodes ?? 0)} 集`)
+      setPhase(null)
+      setLoading(false)
+      abortRef.current = null
+      return
+    }
+
+    setProgress({ current: 0, total })
+
+    for (let i = 0; i < total; i++) {
+      if (controller.signal.aborted) break
+
+      const ep = richResult.episodes[i]
+      if (ep.content && ep.content.length > 50) {
+        setProgress({ current: i + 1, total })
+        continue
+      }
+
+      setProgress({ current: i, total })
+
+      let lastError = null
+      let success = false
+
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        if (controller.signal.aborted) break
+
+        if (attempt > 0) {
+          setPhase(`正在续写第 ${ep.number} 集（第${attempt}次）...`)
+          await new Promise(r => setTimeout(r, attempt * 1000))
+        }
+
+        try {
+          const timeoutSignal = AbortSignal.timeout(EPISODE_TIMEOUT)
+          const combinedSignal = AbortSignal.any([controller.signal, timeoutSignal])
+
+          const episodeData = await generateEpisode(richResult, ep.number, total, combinedSignal)
+
+          richResult.episodes[i] = {
+            ...richResult.episodes[i],
+            title: episodeData.title || ep.title,
+            summary: episodeData.summary || ep.summary,
+            scene: episodeData.scene || '',
+            content: episodeData.content || ''
+          }
+          resultRef.current = { ...richResult }
+          setResult({ ...richResult })
+          setProgress({ current: i + 1, total })
+          success = true
+          saveToHistory(richResult)
+          break
+        } catch (epErr) {
+          if (epErr.name === 'AbortError' && controller.signal.aborted) throw epErr
+          if (epErr.needPayment) throw epErr
+          lastError = epErr
+          console.warn(`第${ep.number}集续写失败(尝试${attempt + 1}/3):`, epErr?.message || epErr)
+        }
+      }
+
+      if (!success) {
+        console.error(`第${ep.number}集续写失败，已重试3次:`, lastError?.message || lastError)
+        richResult.episodes[i] = { ...richResult.episodes[i], content: richResult.episodes[i].content || '' }
+        setFailedEpisodes(prev => [...prev, ep.number])
+        resultRef.current = { ...richResult }
+        setResult({ ...richResult })
+        setProgress({ current: i + 1, total })
+      }
+    }
+
+    const freshUser2 = await refreshUserInfo()
+    if (freshUser2) setUser(freshUser2)
+    setPhase('complete')
+    saveToHistory(richResult)
+    setLoading(false)
+    abortRef.current = null
+  }, [user])
+
   const handleNew = () => {
     setResult(null)
     setError('')
@@ -325,7 +429,11 @@ function App() {
 
   const handleViewHistory = (data) => {
     setResult(data)
-    setPhase('complete')
+    if (isScriptComplete(data)) {
+      setPhase('complete')
+    } else {
+      setPhase('incomplete') // 未完成，显示继续生成按钮
+    }
     setPage('result')
   }
 
@@ -369,12 +477,12 @@ function App() {
         {loading && phase === 'episodes' && result && (
           <div className="max-w-5xl mx-auto px-4 py-16">
             <LoadingState phase="episodes" progress={progress} failedEpisodes={failedEpisodes} retrying={retrying} onStop={handleStop} />
-            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} onRetryFailed={handleRetryFailed} retrying={retrying} />
+            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} onRetryFailed={handleRetryFailed} retrying={retrying} onContinue={handleContinueGenerate} />
           </div>
         )}
 
         {page === 'history' && !loading && (
-          <HistoryList onView={handleViewHistory} onClose={() => navigate('form')} />
+          <HistoryList onView={handleViewHistory} onContinue={handleContinueGenerate} onClose={() => navigate('form')} />
         )}
 
         {page === 'topup' && (
@@ -410,11 +518,18 @@ function App() {
           <div className="max-w-5xl mx-auto px-4 py-16">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-2xl font-bold">生成结果</h2>
-              <button onClick={handleNew} className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-dark transition text-sm">
-                + 创作新剧本
-              </button>
+              <div className="flex gap-2">
+                {phase === 'incomplete' && (
+                  <button onClick={() => handleContinueGenerate(result)} className="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition text-sm font-medium">
+                    🚀 继续生成（{getIncompleteCount(result)}集）
+                  </button>
+                )}
+                <button onClick={handleNew} className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-dark transition text-sm">
+                  + 创作新剧本
+                </button>
+              </div>
             </div>
-            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} onRetryFailed={handleRetryFailed} retrying={retrying} />
+            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} onRetryFailed={handleRetryFailed} retrying={retrying} onContinue={handleContinueGenerate} />
           </div>
         )}
       </main>

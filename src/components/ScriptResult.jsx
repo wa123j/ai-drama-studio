@@ -5,7 +5,7 @@ import EpisodeList from './EpisodeList.jsx'
 import KeyLines from './KeyLines.jsx'
 import { copyAllText, downloadTxt } from '../utils/export.js'
 
-export default function ScriptResult({ data, phase, failedEpisodes, onRetryFailed, retrying }) {
+export default function ScriptResult({ data, phase, failedEpisodes, onRetryFailed, retrying, onContinue }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [copied, setCopied] = useState(false)
 
@@ -17,6 +17,7 @@ export default function ScriptResult({ data, phase, failedEpisodes, onRetryFaile
   ]
 
   const isGenerating = phase === 'episodes'
+  const isIncomplete = phase === 'incomplete'
 
   const handleCopy = async () => {
     const text = copyAllText(data)
@@ -27,6 +28,18 @@ export default function ScriptResult({ data, phase, failedEpisodes, onRetryFaile
 
   return (
     <div>
+      {/* 未完成提示条 */}
+      {isIncomplete && onContinue && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 flex items-center justify-between gap-4">
+          <div className="text-sm text-amber-700">
+            <span className="font-bold">⏳ 剧本未完成</span> — 部分剧集还没有生成，您可以继续生成剩余内容
+          </div>
+          <button onClick={() => onContinue(data)} className="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition text-sm font-medium shrink-0">
+            继续生成
+          </button>
+        </div>
+      )}
+
       {/* 操作栏 */}
       <div className="flex flex-wrap gap-2 mb-4">
         <button onClick={handleCopy} className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium hover:bg-slate-50 transition">
