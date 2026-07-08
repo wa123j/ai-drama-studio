@@ -1,9 +1,9 @@
 export default function HeroSection({ onStart }) {
   return (
     <section className="relative overflow-hidden pt-20 pb-28">
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-rose-50 pointer-events-none" />
-      <div className="absolute top-20 -left-20 w-80 h-80 bg-indigo-200/30 rounded-full blur-3xl" />
-      <div className="absolute bottom-10 -right-20 w-96 h-96 bg-rose-200/20 rounded-full blur-3xl" />
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-50/90 via-amber-50/40 to-transparent pointer-events-none" />
+      <div className="absolute top-20 -left-20 w-80 h-80 bg-amber-300/25 rounded-full blur-3xl" />
+      <div className="absolute bottom-10 -right-20 w-96 h-96 bg-yellow-300/15 rounded-full blur-3xl" />
 
       <div className="relative max-w-4xl mx-auto px-4 text-center">
         <div className="inline-flex items-center gap-2 bg-indigo-100 text-primary px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium mb-5 sm:mb-6">

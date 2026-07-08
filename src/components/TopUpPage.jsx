@@ -19,14 +19,14 @@ export default function TopUpPage({ user, onUserUpdate }) {
   const remaining = user?.remainingEpisodes ?? 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-film">
       <div className="max-w-3xl mx-auto px-4 py-16">
         {/* 剩余额度 */}
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">充值中心</h1>
-          <p className="text-slate-500">
+          <h1 className="text-3xl font-bold text-white mb-2">充值中心</h1>
+          <p className="text-amber-100/80">
             当前剩余额度：<span className="text-primary font-bold text-xl">{remaining}</span> 集
-            {remaining <= 0 && <span className="text-red-500 ml-2">（已用完）</span>}
+            {remaining <= 0 && <span className="text-red-400 ml-2">（已用完）</span>}
           </p>
         </div>
 
@@ -101,8 +101,8 @@ export default function TopUpPage({ user, onUserUpdate }) {
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-slate-400 mt-2">微信扫码支付</p>
-              <p className="text-xs text-slate-400">微信号：<strong>wa123j</strong></p>
+              <p className="text-xs text-amber-200/70 mt-2">微信扫码支付</p>
+              <p className="text-xs text-amber-200/70">微信号：<strong>wa123j</strong></p>
             </div>
           </div>
         </div>

@@ -9,7 +9,7 @@ const features = [
 
 export default function Features() {
   return (
-    <section id="features" className="py-16 bg-white">
+    <section id="features" className="py-16 bg-white/90 backdrop-blur-sm">
       <div className="max-w-6xl mx-auto px-4">
         <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">为什么选择AI短剧工坊？</h2>
         <p className="text-sm sm:text-base text-slate-500 text-center mb-10 sm:mb-12">专为短剧创作者打造的AI剧本助手</p>

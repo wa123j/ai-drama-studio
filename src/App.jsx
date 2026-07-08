@@ -444,7 +444,7 @@ function App() {
 
   // 已登录 → 主界面
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-film">
       <Header
         user={user}
         onHome={() => navigate('home')}
@@ -464,8 +464,8 @@ function App() {
 
         {page === 'form' && !loading && !result && (
           <div className="max-w-3xl mx-auto px-4 py-16">
-            <h2 className="text-3xl font-bold text-center mb-2">开始创作短剧</h2>
-            <p className="text-slate-500 text-center mb-10">填写以下信息，AI将为您生成完整剧本</p>
+            <h2 className="text-3xl font-bold text-center mb-2 text-white">开始创作短剧</h2>
+            <p className="text-amber-100/80 text-center mb-10">填写以下信息，AI将为您生成完整剧本</p>
             <GeneratorForm onGenerate={handleGenerate} />
           </div>
         )}
@@ -517,7 +517,7 @@ function App() {
         {result && !loading && (
           <div className="max-w-5xl mx-auto px-4 py-16">
             <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-bold">生成结果</h2>
+              <h2 className="text-2xl font-bold text-white">生成结果</h2>
               <div className="flex gap-2">
                 {phase === 'incomplete' && (
                   <button onClick={() => handleContinueGenerate(result)} className="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition text-sm font-medium">

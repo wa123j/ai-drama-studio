@@ -20,8 +20,8 @@ export default function HistoryList({ onView, onContinue, onClose }) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-24 text-center">
         <div className="text-6xl mb-6">📭</div>
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">还没有历史记录</h2>
-        <p className="text-slate-500 mb-6">生成的短剧剧本会自动保存在这里</p>
+        <h2 className="text-2xl font-bold text-white mb-2">还没有历史记录</h2>
+        <p className="text-amber-100/80 mb-6">生成的短剧剧本会自动保存在这里</p>
         <button onClick={onClose} className="bg-primary text-white px-6 py-3 rounded-xl hover:bg-primary-dark transition">
           去生成第一个剧本
         </button>
@@ -33,8 +33,8 @@ export default function HistoryList({ onView, onContinue, onClose }) {
     <div className="max-w-4xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">📚 历史记录</h2>
-          <p className="text-slate-400 text-sm mt-1">共 {history.length} 部剧本</p>
+          <h2 className="text-2xl font-bold text-white">📚 历史记录</h2>
+          <p className="text-amber-200/80 text-sm mt-1">共 {history.length} 部剧本</p>
         </div>
         <button onClick={handleClear} className="text-sm text-red-400 hover:text-red-600 transition px-3 py-1.5 rounded-lg hover:bg-red-50">
           清空记录
