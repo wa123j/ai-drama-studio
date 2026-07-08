@@ -111,9 +111,9 @@ export async function addPaidEpisodes(id, extraCount) {
   return true
 }
 
-export async function deductEpisodes(id, count) {
+export async function reduceRemainingEpisodes(id, count) {
   await getDb()
-  db.run('UPDATE users SET total_episodes = MAX(0, total_episodes - ?) WHERE id = ?', [count, id])
+  db.run('UPDATE users SET paid_extra_episodes = MAX(0, paid_extra_episodes - ?) WHERE id = ?', [count, id])
   saveDb()
   return true
 }

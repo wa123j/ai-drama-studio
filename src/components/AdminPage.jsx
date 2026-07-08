@@ -9,7 +9,7 @@ export default function AdminPage({ user, onLogout }) {
   const [targetUsername, setTargetUsername] = useState('')
   const [extraCount, setExtraCount] = useState(50)
 
-  // 减少已用集数表单
+  // 减少剩余集数表单
   const [deductUsername, setDeductUsername] = useState('')
   const [deductCount, setDeductCount] = useState(1)
 
@@ -54,10 +54,10 @@ export default function AdminPage({ user, onLogout }) {
     }
   }
 
-  const handleDeductEpisodes = async (e) => {
+  const handleReduceEpisodes = async (e) => {
     e.preventDefault()
     try {
-      const res = await authFetch('/api/admin/deduct-episodes', {
+      const res = await authFetch('/api/admin/reduce-episodes', {
         method: 'POST',
         body: JSON.stringify({ username: deductUsername, count: deductCount })
       })
@@ -142,11 +142,11 @@ export default function AdminPage({ user, onLogout }) {
           </form>
         </div>
 
-        {/* ===== 减少已用集数 ===== */}
+        {/* ===== 减少剩余集数 ===== */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-sm mb-4 sm:mb-6">
-          <h2 className="font-bold text-slate-800 mb-4 text-base sm:text-lg">➖ 减少已用集数</h2>
-          <p className="text-xs text-slate-400 mb-3">例如用户已用了5集，减少3集后变为用了2集，剩余额度增加</p>
-          <form onSubmit={handleDeductEpisodes} className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 sm:gap-4">
+          <h2 className="font-bold text-slate-800 mb-4 text-base sm:text-lg">➖ 减少剩余集数</h2>
+          <p className="text-xs text-slate-400 mb-3">例如用户还剩20集，减少5集后剩余15集</p>
+          <form onSubmit={handleReduceEpisodes} className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 sm:gap-4">
             <div className="flex-1 min-w-0">
               <label className="block text-sm text-slate-600 mb-1">用户名</label>
               <input

@@ -13,7 +13,7 @@ import {
   buildEpisodeUserPrompt
 } from './prompt.js'
 import { authMiddleware, adminMiddleware, hashPassword, verifyPassword, generateToken } from './auth.js'
-import { findByUsername, findById, createUser, incrementEpisodes, addPaidEpisodes, deductEpisodes, deleteUser, getRemainingEpisodes, getAllUsers } from './store.js'
+import { findByUsername, findById, createUser, incrementEpisodes, addPaidEpisodes, reduceRemainingEpisodes, deleteUser, getRemainingEpisodes, getAllUsers } from './store.js'
 
 dotenv.config()
 
@@ -234,8 +234,8 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
   }
 })
 
-// 减少用户已用集数
-app.post('/api/admin/deduct-episodes', authMiddleware, adminMiddleware, async (req, res) => {
+// 减少用户剩余集数
+app.post('/api/admin/reduce-episodes', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { username, count } = req.body
     if (!username || !count || count < 1) {
@@ -247,9 +247,10 @@ app.post('/api/admin/deduct-episodes', authMiddleware, adminMiddleware, async (r
       return res.status(404).json({ error: '用户不存在' })
     }
 
-    const actualDeduct = Math.min(count, user.totalEpisodes)
-    await deductEpisodes(user.id, actualDeduct)
-    res.json({ success: true, message: `已减少 ${username} 的已用集数 ${actualDeduct} 集` })
+    const remaining = getRemainingEpisodes(user)
+    const actualReduce = Math.min(count, Math.max(0, remaining))
+    await reduceRemainingEpisodes(user.id, actualReduce)
+    res.json({ success: true, message: `已减少 ${username} 的剩余额度 ${actualReduce} 集` })
   } catch (error) {
     console.error('减额度失败:', error)
     res.status(500).json({ error: '操作失败' })
