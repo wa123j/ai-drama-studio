@@ -72,6 +72,9 @@ export async function generateEpisode(framework, episodeNumber, totalEpisodes, s
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
+    if (response.status === 403 && data.needPayment) {
+      throw { needPayment: true, remainingEpisodes: data.remainingEpisodes, message: data.error }
+    }
     throw new Error(data.error || `请求失败 (${response.status})`)
   }
 

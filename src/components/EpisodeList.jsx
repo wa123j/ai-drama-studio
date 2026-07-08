@@ -21,8 +21,8 @@ export default function EpisodeList({ episodes, failedEpisodes }) {
               onClick={() => setExpanded(expanded === i ? null : i)}
               className="w-full flex items-center justify-between p-5 text-left"
             >
-              <div className="flex items-center gap-3">
-                <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+              <div className="flex items-center gap-3 min-w-0">
+                <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold shrink-0 ${
                   isFailed
                     ? 'bg-red-50 text-red-500'
                     : ep.content?.length > 50
@@ -31,9 +31,9 @@ export default function EpisodeList({ episodes, failedEpisodes }) {
                 }`}>
                   {ep.number}
                 </span>
-                <div>
-                  <h3 className="font-semibold text-slate-800">{ep.title}</h3>
-                  <p className="text-sm text-slate-400 mt-0.5 line-clamp-1">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-slate-800 text-sm sm:text-base truncate">{ep.title}</h3>
+                  <p className="text-xs sm:text-sm text-slate-400 mt-0.5 truncate">
                     {isFailed ? '⚠️ 生成失败' : (ep.summary || '等待生成...')}
                   </p>
                 </div>

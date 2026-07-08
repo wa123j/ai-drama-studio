@@ -13,7 +13,7 @@ import {
   buildEpisodeUserPrompt
 } from './prompt.js'
 import { authMiddleware, adminMiddleware, hashPassword, verifyPassword, generateToken } from './auth.js'
-import { findByUsername, findById, createUser, incrementEpisodes, addPaidEpisodes, getRemainingEpisodes, getAllUsers } from './store.js'
+import { findByUsername, findById, createUser, incrementEpisodes, addPaidEpisodes, deductEpisodes, deleteUser, getRemainingEpisodes, getAllUsers } from './store.js'
 
 dotenv.config()
 
@@ -234,6 +234,53 @@ app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =>
   }
 })
 
+// 减少用户已用集数
+app.post('/api/admin/deduct-episodes', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { username, count } = req.body
+    if (!username || !count || count < 1) {
+      return res.status(400).json({ error: '参数错误' })
+    }
+
+    const user = await findByUsername(username)
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' })
+    }
+
+    const actualDeduct = Math.min(count, user.totalEpisodes)
+    await deductEpisodes(user.id, actualDeduct)
+    res.json({ success: true, message: `已减少 ${username} 的已用集数 ${actualDeduct} 集` })
+  } catch (error) {
+    console.error('减额度失败:', error)
+    res.status(500).json({ error: '操作失败' })
+  }
+})
+
+// 删除用户
+app.post('/api/admin/delete-user', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { username } = req.body
+    if (!username) {
+      return res.status(400).json({ error: '缺少用户名' })
+    }
+
+    const user = await findByUsername(username)
+    if (!user) {
+      return res.status(404).json({ error: '用户不存在' })
+    }
+
+    if (user.isAdmin) {
+      return res.status(400).json({ error: '不能删除管理员账号' })
+    }
+
+    await deleteUser(user.id)
+    res.json({ success: true, message: `已删除用户 ${username}` })
+  } catch (error) {
+    console.error('删除用户失败:', error)
+    res.status(500).json({ error: '操作失败' })
+  }
+})
+
 // ========================================
 // 生成接口（需要登录）
 // ========================================
@@ -315,7 +362,6 @@ app.post('/api/generate/framework', authMiddleware, async (req, res) => {
     if (remaining < episodeCount) {
       return res.status(403).json({ error: `额度不足，需要 ${episodeCount} 集，剩余 ${Math.max(0, remaining)} 集`, remainingEpisodes: Math.max(0, remaining), needPayment: true })
     }
-    await incrementEpisodes(req.user.id, episodeCount)
 
     const text = await callDeepSeek(
       buildFrameworkSystemPrompt(),
@@ -353,6 +399,15 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
     if (!checkApiKey()) {
       return res.status(400).json({ error: '请先配置 DEEPSEEK_API_KEY 环境变量' })
     }
+
+    // 每生成一集扣1集额度（停止或关页面只扣已生成的）
+    const user = await findById(req.user.id)
+    if (!user) return res.status(404).json({ error: '用户不存在' })
+    const remaining = getRemainingEpisodes(user)
+    if (remaining < 1) {
+      return res.status(403).json({ error: '额度不足，请充值', remainingEpisodes: 0, needPayment: true })
+    }
+    await incrementEpisodes(req.user.id, 1)
 
     const text = await callDeepSeek(
       buildEpisodeSystemPrompt(),

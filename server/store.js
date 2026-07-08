@@ -111,6 +111,20 @@ export async function addPaidEpisodes(id, extraCount) {
   return true
 }
 
+export async function deductEpisodes(id, count) {
+  await getDb()
+  db.run('UPDATE users SET total_episodes = MAX(0, total_episodes - ?) WHERE id = ?', [count, id])
+  saveDb()
+  return true
+}
+
+export async function deleteUser(id) {
+  await getDb()
+  db.run('DELETE FROM users WHERE id = ?', [id])
+  saveDb()
+  return true
+}
+
 export function getRemainingEpisodes(user) {
   return Math.max(0, 10 + (user.paidExtraEpisodes || 0) - (user.totalEpisodes || 0))
 }

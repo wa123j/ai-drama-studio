@@ -20,17 +20,17 @@ export default function GeneratorForm({ onGenerate }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+    <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-8 shadow-sm">
       {/* 短剧类型 */}
-      <div className="mb-6">
-        <label className="block text-sm font-semibold text-slate-700 mb-3">短剧类型</label>
-        <div className="flex flex-wrap gap-2">
+      <div className="mb-5 sm:mb-6">
+        <label className="block text-sm font-semibold text-slate-700 mb-2 sm:mb-3">短剧类型</label>
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           {genres.map(g => (
             <button
               key={g}
               type="button"
               onClick={() => handleChange('genre', g)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition ${
                 form.genre === g
                   ? 'bg-primary text-white shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'

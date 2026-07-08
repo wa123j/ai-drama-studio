@@ -84,7 +84,7 @@ export default function TopUpPage({ user, onUserUpdate }) {
 
             {/* 右侧收款码 */}
             <div className="text-center">
-              <div className="w-48 h-48 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+              <div className="w-40 sm:w-48 h-40 sm:h-48 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                 <img
                   src="/wechat-qr.jpg"
                   alt="微信收款码"

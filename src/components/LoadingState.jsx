@@ -1,4 +1,4 @@
-export default function LoadingState({ phase, progress, failedEpisodes, onStop }) {
+export default function LoadingState({ phase, progress, failedEpisodes, onStop, retrying }) {
   // Phase 1: 正在生成框架
   if (phase === 'framework') {
     return (
@@ -35,11 +35,17 @@ export default function LoadingState({ phase, progress, failedEpisodes, onStop }
     return (
       <div className="max-w-3xl mx-auto px-4 py-8 text-center">
         <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm mb-6">
-          <h3 className="text-lg font-bold text-slate-800 mb-2">正在逐集生成详细内容...</h3>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">
+            {retrying ? '正在重试失败剧集...' : '正在逐集生成详细内容...'}
+          </h3>
           <p className="text-slate-500 mb-4">
-            已完成 <span className="text-primary font-bold">{Math.max(0, progress.current - failed)}</span> / {progress.total} 集
+            {retrying ? (
+              <>正在重试 <span className="text-primary font-bold">{progress.current}</span> / {progress.total} 集</>
+            ) : (
+              <>已完成 <span className="text-primary font-bold">{Math.max(0, progress.current - failed)}</span> / {progress.total} 集</>
+            )}
             {failed > 0 && (
-              <span className="text-amber-600 ml-2">（{failed} 集失败）</span>
+              <span className="text-amber-600 ml-2">（{failed} 集失败，将自动重试）</span>
             )}
           </p>
 
@@ -52,11 +58,21 @@ export default function LoadingState({ phase, progress, failedEpisodes, onStop }
           </div>
 
           <p className="text-sm text-slate-400 mb-2">
-            正在生成第 {Math.min(progress.current + 1, progress.total)} 集...
+            {retrying ? `正在重试第 ${Math.min(progress.current + 1, progress.total)} 集...` : `正在生成第 ${Math.min(progress.current + 1, progress.total)} 集...`}
           </p>
           <p className="text-xs text-slate-400">
-            您可以先浏览下方已生成的内容
+            {retrying ? '失败剧集将自动重试最多3次' : '您可以先浏览下方已生成的内容'}
           </p>
+
+          {onStop && (
+            <button
+              onClick={onStop}
+              className="mt-4 inline-flex items-center gap-2 bg-red-50 text-red-600 border border-red-200 px-5 py-2.5 rounded-xl hover:bg-red-100 transition font-medium text-sm"
+            >
+              <span>⏹</span>
+              {retrying ? '停止重试' : '停止生成'}
+            </button>
+          )}
         </div>
       </div>
     )

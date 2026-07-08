@@ -5,7 +5,7 @@ import EpisodeList from './EpisodeList.jsx'
 import KeyLines from './KeyLines.jsx'
 import { copyAllText, downloadTxt } from '../utils/export.js'
 
-export default function ScriptResult({ data, phase, failedEpisodes }) {
+export default function ScriptResult({ data, phase, failedEpisodes, onRetryFailed, retrying }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [copied, setCopied] = useState(false)
 
@@ -28,34 +28,42 @@ export default function ScriptResult({ data, phase, failedEpisodes }) {
   return (
     <div>
       {/* 操作栏 */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <button onClick={handleCopy} className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
-          {copied ? '✅ 已复制' : '📋 复制全部'}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={handleCopy} className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium hover:bg-slate-50 transition">
+          {copied ? '✅ 已复制' : '📋 复制'}
         </button>
-        <button onClick={() => downloadTxt(data)} className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium hover:bg-slate-50 transition">
-          📥 下载TXT
+        <button onClick={() => downloadTxt(data)} className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium hover:bg-slate-50 transition">
+          📥 下载
         </button>
+        {/* 重试失败剧集按钮 */}
+        {failedEpisodes?.length > 0 && !isGenerating && !retrying && (
+          <button onClick={onRetryFailed} className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium text-amber-700 hover:bg-amber-100 transition">
+            🔄 重试（{failedEpisodes.length}集）
+          </button>
+        )}
         {isGenerating && (
-          <span className="inline-flex items-center gap-2 bg-amber-50 text-amber-700 border border-amber-200 px-4 py-2 rounded-xl text-sm font-medium">
+          <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium">
             <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-            生成中...
+            {retrying ? '重试中...' : '生成中...'}
           </span>
         )}
       </div>
 
       {/* Tab切换 */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mb-6 overflow-x-auto">
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-              activeTab === tab.key ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="sticky top-16 z-40 -mx-4 px-4 bg-gradient-to-b from-slate-50 to-transparent pb-2 mb-4 sm:static sm:mx-0 sm:px-0 sm:bg-none sm:pb-0 sm:mb-6">
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto scrollbar-none">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap ${
+                activeTab === tab.key ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 内容区 */}

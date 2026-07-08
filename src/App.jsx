@@ -25,9 +25,16 @@ function App() {
   const [phase, setPhase] = useState(null)
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [failedEpisodes, setFailedEpisodes] = useState([])
+  const [retrying, setRetrying] = useState(false)
   const [user, setUser] = useState(null)
   const abortRef = useRef(null)
   const resultRef = useRef(null)
+  const failedEpisodesRef = useRef([])
+
+  // 同步 failedEpisodes 到 ref，避免闭包问题
+  useEffect(() => {
+    failedEpisodesRef.current = failedEpisodes
+  }, [failedEpisodes])
 
   // 初始化：检查登录状态
   useEffect(() => {
@@ -38,6 +45,19 @@ function App() {
       })
     }
   }, [])
+
+  // 生成中关闭页面时提示
+  useEffect(() => {
+    const handler = (e) => {
+      if (loading || retrying) {
+        e.preventDefault()
+        e.returnValue = '剧本正在生成中，关闭后不会在后台继续，确定要离开吗？'
+        return e.returnValue
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [loading, retrying])
 
   const navigate = (target) => {
     setResult(null)
@@ -106,7 +126,7 @@ function App() {
       setResult({ ...richResult })
       setPhase('episodes')
 
-      // Phase 2: 逐集生成
+      // Phase 2: 逐集生成（含自动重试机制）
       const total = richResult.episodes.length
       setProgress({ current: 0, total })
 
@@ -120,26 +140,50 @@ function App() {
         }
 
         setProgress({ current: i, total })
-        const timeoutSignal = AbortSignal.timeout(EPISODE_TIMEOUT)
-        const combinedSignal = AbortSignal.any([controller.signal, timeoutSignal])
 
-        try {
-          const episodeData = await generateEpisode(richResult, ep.number, total, combinedSignal)
-          richResult.episodes[i] = {
-            ...richResult.episodes[i],
-            title: episodeData.title || ep.title,
-            summary: episodeData.summary || ep.summary,
-            scene: episodeData.scene || '',
-            content: episodeData.content || ''
+        let lastError = null
+        let success = false
+
+        // 自动重试最多 3 次（网络波动自动恢复）
+        for (let attempt = 0; attempt <= 2; attempt++) {
+          if (controller.signal.aborted) break
+
+          if (attempt > 0) {
+            setPhase(`正在重试第 ${ep.number} 集（第${attempt}次）...`)
+            await new Promise(r => setTimeout(r, attempt * 1000))
           }
-          resultRef.current = { ...richResult }
-          setResult({ ...richResult })
-          setProgress({ current: i + 1, total })
-        } catch (epErr) {
-          if (epErr.name === 'AbortError') {
-            if (controller.signal.aborted) throw epErr
+
+          try {
+            const timeoutSignal = AbortSignal.timeout(EPISODE_TIMEOUT)
+            const combinedSignal = AbortSignal.any([controller.signal, timeoutSignal])
+
+            const episodeData = await generateEpisode(richResult, ep.number, total, combinedSignal)
+
+            richResult.episodes[i] = {
+              ...richResult.episodes[i],
+              title: episodeData.title || ep.title,
+              summary: episodeData.summary || ep.summary,
+              scene: episodeData.scene || '',
+              content: episodeData.content || ''
+            }
+            resultRef.current = { ...richResult }
+            setResult({ ...richResult })
+            setProgress({ current: i + 1, total })
+            success = true
+            // 每成功生成一集就保存到历史，关页面也不丢
+            saveToHistory(richResult)
+            break // 生成成功，跳出重试循环
+          } catch (epErr) {
+            if (epErr.name === 'AbortError' && controller.signal.aborted) throw epErr
+            if (epErr.needPayment) throw epErr // 额度用完，停止整个生成
+            lastError = epErr
+            console.warn(`第${ep.number}集生成失败(尝试${attempt + 1}/3):`, epErr?.message || epErr)
           }
-          console.error(`第${ep.number}集生成失败:`, epErr?.message || epErr)
+        }
+
+        // 3 次都失败才标记为失败
+        if (!success) {
+          console.error(`第${ep.number}集生成失败，已重试3次:`, lastError?.message || lastError)
           richResult.episodes[i] = { ...richResult.episodes[i], content: richResult.episodes[i].content || '' }
           setFailedEpisodes(prev => [...prev, ep.number])
           resultRef.current = { ...richResult }
@@ -167,7 +211,108 @@ function App() {
 
   const handleStop = () => {
     if (abortRef.current) abortRef.current.abort()
+    if (retrying) setRetrying(false)
   }
+
+  /** 手动重试失败的剧集 */
+  const handleRetryFailed = useCallback(async () => {
+    const richResult = resultRef.current
+    if (!richResult) return
+
+    const failedNumbers = [...failedEpisodesRef.current]
+    if (failedNumbers.length === 0) return
+
+    setRetrying(true)
+    setLoading(true)
+    setError('')
+    setPhase('episodes')
+    setPage('result')
+
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const total = richResult.episodes.length
+    setProgress({ current: 0, total })
+    setFailedEpisodes([]) // 重置失败列表，重新开始
+
+    const newFailed = []
+
+    try {
+      for (let i = 0; i < total; i++) {
+      const ep = richResult.episodes[i]
+      if (!failedNumbers.includes(ep.number)) {
+        setProgress({ current: i + 1, total })
+        continue
+      }
+
+      if (controller.signal.aborted) break
+
+      let lastError = null
+      let success = false
+
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        if (controller.signal.aborted) break
+
+        if (attempt > 0) {
+          setPhase(`正在重试第 ${ep.number} 集（第${attempt}次）...`)
+          await new Promise(r => setTimeout(r, attempt * 1000))
+        }
+
+        try {
+          const timeoutSignal = AbortSignal.timeout(EPISODE_TIMEOUT)
+          const combinedSignal = AbortSignal.any([controller.signal, timeoutSignal])
+
+          const episodeData = await generateEpisode(richResult, ep.number, total, combinedSignal)
+
+          richResult.episodes[i] = {
+            ...richResult.episodes[i],
+            title: episodeData.title || ep.title,
+            summary: episodeData.summary || ep.summary,
+            scene: episodeData.scene || '',
+            content: episodeData.content || ''
+          }
+          resultRef.current = { ...richResult }
+          setResult({ ...richResult })
+          success = true
+          saveToHistory(richResult)
+          break
+        } catch (epErr) {
+          if (epErr.name === 'AbortError' && controller.signal.aborted) throw epErr
+          if (epErr.needPayment) throw epErr
+          lastError = epErr
+          console.warn(`第${ep.number}集重试失败(尝试${attempt + 1}/3):`, epErr?.message || epErr)
+        }
+      }
+
+      if (!success) {
+        newFailed.push(ep.number)
+      }
+
+      setProgress({ current: i + 1, total })
+    }
+    } catch (err) {
+      if (err.needPayment) {
+        setError(err.message || '额度不足，请充值')
+      } else if (err.name === 'AbortError') {
+        setError('已手动停止重试')
+      } else {
+        setError(err.message || '重试失败')
+      }
+    }
+
+    setFailedEpisodes(newFailed)
+
+    // 刷新额度
+    const freshUser = await refreshUserInfo()
+    if (freshUser) setUser(freshUser)
+
+    if (newFailed.length === 0) {
+      setPhase('complete')
+    }
+    setRetrying(false)
+    setLoading(false)
+    abortRef.current = null
+  }, [])
 
   const handleNew = () => {
     setResult(null)
@@ -223,8 +368,8 @@ function App() {
 
         {loading && phase === 'episodes' && result && (
           <div className="max-w-5xl mx-auto px-4 py-16">
-            <LoadingState phase="episodes" progress={progress} failedEpisodes={failedEpisodes} onStop={handleStop} />
-            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} />
+            <LoadingState phase="episodes" progress={progress} failedEpisodes={failedEpisodes} retrying={retrying} onStop={handleStop} />
+            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} onRetryFailed={handleRetryFailed} retrying={retrying} />
           </div>
         )}
 
@@ -269,7 +414,7 @@ function App() {
                 + 创作新剧本
               </button>
             </div>
-            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} />
+            <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} onRetryFailed={handleRetryFailed} retrying={retrying} />
           </div>
         )}
       </main>

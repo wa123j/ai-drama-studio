@@ -6,25 +6,25 @@ export default function HeroSection({ onStart }) {
       <div className="absolute bottom-10 -right-20 w-96 h-96 bg-rose-200/20 rounded-full blur-3xl" />
 
       <div className="relative max-w-4xl mx-auto px-4 text-center">
-        <div className="inline-flex items-center gap-2 bg-indigo-100 text-primary px-4 py-1.5 rounded-full text-sm font-medium mb-6">
-          <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+        <div className="inline-flex items-center gap-2 bg-indigo-100 text-primary px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium mb-5 sm:mb-6">
+          <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-primary rounded-full animate-pulse" />
           AI驱动的短剧创作工具 · 免费使用
         </div>
 
-        <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 leading-tight mb-6">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-slate-900 leading-tight mb-5 sm:mb-6">
           一键生成
           <span className="text-primary">爆款短剧</span>
           剧本
         </h1>
 
-        <p className="text-lg text-slate-500 max-w-2xl mx-auto mb-10 leading-relaxed">
-          输入主题和类型，AI自动为你生成完整的短剧剧本——<br />
+        <p className="text-sm sm:text-lg text-slate-500 max-w-2xl mx-auto mb-8 sm:mb-10 leading-relaxed px-2">
+          输入主题和类型，AI自动为你生成完整的短剧剧本——
           包含<span className="text-slate-700 font-semibold">角色卡</span>、
           <span className="text-slate-700 font-semibold">分集剧本</span>、
           <span className="text-slate-700 font-semibold">爆款金句</span>，一键复制导出
         </p>
 
-        <button onClick={onStart} className="bg-primary text-white text-lg px-10 py-4 rounded-xl hover:bg-primary-dark transition shadow-lg shadow-indigo-200 font-bold">
+        <button onClick={onStart} className="bg-primary text-white text-base sm:text-lg px-8 sm:px-10 py-3.5 sm:py-4 rounded-xl hover:bg-primary-dark transition shadow-lg shadow-indigo-200 font-bold">
           🚀 立即开始创作
         </button>
 
