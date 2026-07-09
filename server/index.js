@@ -20,6 +20,10 @@ dotenv.config()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 
+// 防重复扣费：记录已扣费的 (userId + framework.title + episodeNumber)
+const chargedSet = new Set()
+setInterval(() => chargedSet.clear(), 1000 * 60 * 30) // 每30分钟清空一次，防止内存泄漏
+
 app.use(cors())
 app.use(express.json())
 
@@ -410,6 +414,10 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: '额度不足，请充值', remainingEpisodes: 0, needPayment: true })
     }
 
+    // 防重复扣费检查：同一用户 + 同一剧本 + 同一集号，只扣一次
+    const dedupKey = `${req.user.id}:${framework.title}:${episodeNumber}`
+    const alreadyCharged = chargedSet.has(dedupKey)
+
     const text = await callDeepSeek(
       buildEpisodeSystemPrompt(),
       buildEpisodeUserPrompt(framework, episodeNumber, totalEpisodes || framework.episodes?.length)
@@ -426,7 +434,10 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
 
     // 先返回结果给前端，再扣费——避免用户刷新时扣了费但没拿到结果
     res.json({ success: true, data })
-    incrementEpisodes(req.user.id, 1).catch(e => console.error('扣费失败:', e))
+    if (!alreadyCharged) {
+      chargedSet.add(dedupKey)
+      incrementEpisodes(req.user.id, 1).catch(e => console.error('扣费失败:', e))
+    }
   } catch (error) {
     console.error('生成单集失败:', error)
     res.status(500).json({ error: `生成第${req.body.episodeNumber}集失败：` + (error.message || '未知错误') })

@@ -14,7 +14,7 @@ import { generateFramework, generateEpisode } from './utils/api.js'
 import { saveToHistory, isScriptComplete, getIncompleteCount } from './utils/history.js'
 import { getToken, clearAuth, refreshUserInfo } from './utils/auth.js'
 
-const EPISODE_TIMEOUT = 45_000
+const EPISODE_TIMEOUT = 120_000
 
 function App() {
   const [page, setPage] = useState('home')
@@ -174,7 +174,11 @@ function App() {
             saveToHistory(richResult)
             break // 生成成功，跳出重试循环
           } catch (epErr) {
-            if (epErr.name === 'AbortError' && controller.signal.aborted) throw epErr
+            if (epErr.name === 'AbortError') {
+              if (controller.signal.aborted) throw epErr // 用户主动停止
+              console.warn(`第${ep.number}集超时，跳过自动重试避免重复扣费`)
+              break // 超时→可能已扣费，不重试
+            }
             if (epErr.needPayment) throw epErr // 额度用完，停止整个生成
             lastError = epErr
             console.warn(`第${ep.number}集生成失败(尝试${attempt + 1}/3):`, epErr?.message || epErr)
@@ -277,7 +281,11 @@ function App() {
           saveToHistory(richResult)
           break
         } catch (epErr) {
-          if (epErr.name === 'AbortError' && controller.signal.aborted) throw epErr
+          if (epErr.name === 'AbortError') {
+            if (controller.signal.aborted) throw epErr
+            console.warn(`第${ep.number}集超时，跳过自动重试避免重复扣费`)
+            break
+          }
           if (epErr.needPayment) throw epErr
           lastError = epErr
           console.warn(`第${ep.number}集重试失败(尝试${attempt + 1}/3):`, epErr?.message || epErr)
@@ -396,7 +404,11 @@ function App() {
           saveToHistory(richResult)
           break
         } catch (epErr) {
-          if (epErr.name === 'AbortError' && controller.signal.aborted) throw epErr
+          if (epErr.name === 'AbortError') {
+            if (controller.signal.aborted) throw epErr
+            console.warn(`第${ep.number}集超时，跳过自动重试避免重复扣费`)
+            break
+          }
           if (epErr.needPayment) throw epErr
           lastError = epErr
           console.warn(`第${ep.number}集续写失败(尝试${attempt + 1}/3):`, epErr?.message || epErr)
