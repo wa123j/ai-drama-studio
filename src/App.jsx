@@ -26,6 +26,7 @@ function App() {
   const [progress, setProgress] = useState({ current: 0, total: 0 })
   const [failedEpisodes, setFailedEpisodes] = useState([])
   const [retrying, setRetrying] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('') // 独立的提示信息，不影响 phase
   const [user, setUser] = useState(null)
   const abortRef = useRef(null)
   const resultRef = useRef(null)
@@ -149,7 +150,7 @@ function App() {
           if (controller.signal.aborted) break
 
           if (attempt > 0) {
-            setPhase(`正在重试第 ${ep.number} 集（第${attempt}次）...`)
+            setStatusMessage(`正在重试第 ${ep.number} 集（第${attempt}次）...`)
             await new Promise(r => setTimeout(r, attempt * 1000))
           }
 
@@ -254,7 +255,7 @@ function App() {
         if (controller.signal.aborted) break
 
         if (attempt > 0) {
-          setPhase(`正在重试第 ${ep.number} 集（第${attempt}次）...`)
+          setStatusMessage(`正在重试第 ${ep.number} 集（第${attempt}次）...`)
           await new Promise(r => setTimeout(r, attempt * 1000))
         }
 
@@ -369,7 +370,7 @@ function App() {
         if (controller.signal.aborted) break
 
         if (attempt > 0) {
-          setPhase(`正在续写第 ${ep.number} 集（第${attempt}次）...`)
+          setStatusMessage(`正在续写第 ${ep.number} 集（第${attempt}次）...`)
           await new Promise(r => setTimeout(r, attempt * 1000))
         }
 
@@ -476,7 +477,7 @@ function App() {
 
         {loading && phase === 'episodes' && result && (
           <div className="max-w-5xl mx-auto px-4 py-16">
-            <LoadingState phase="episodes" progress={progress} failedEpisodes={failedEpisodes} retrying={retrying} onStop={handleStop} />
+            <LoadingState phase="episodes" progress={progress} failedEpisodes={failedEpisodes} retrying={retrying} statusMessage={statusMessage} onStop={handleStop} />
             <ScriptResult data={result} phase={phase} failedEpisodes={failedEpisodes} onRetryFailed={handleRetryFailed} retrying={retrying} onContinue={handleContinueGenerate} />
           </div>
         )}

@@ -423,10 +423,15 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
     data.number = data.number || episodeNumber
     data.title = data.title || ''
 
-    // AI 返回有效内容后才扣费（重试不会重复扣）
-    await incrementEpisodes(req.user.id, 1)
-
+    // 先返回结果给前端，再扣费——避免用户刷新时扣了费但没拿到结果
     res.json({ success: true, data })
+    res.on('finish', async () => {
+      try {
+        await incrementEpisodes(req.user.id, 1)
+      } catch (e) {
+        console.error('扣费失败:', e)
+      }
+    })
   } catch (error) {
     console.error('生成单集失败:', error)
     res.status(500).json({ error: `生成第${req.body.episodeNumber}集失败：` + (error.message || '未知错误') })

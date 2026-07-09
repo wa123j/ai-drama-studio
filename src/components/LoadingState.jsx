@@ -1,4 +1,4 @@
-export default function LoadingState({ phase, progress, failedEpisodes, onStop, retrying }) {
+export default function LoadingState({ phase, progress, failedEpisodes, onStop, retrying, statusMessage }) {
   // Phase 1: 正在生成框架
   if (phase === 'framework') {
     return (
@@ -58,10 +58,10 @@ export default function LoadingState({ phase, progress, failedEpisodes, onStop, 
           </div>
 
           <p className="text-sm text-slate-400 mb-2">
-            {retrying ? `正在重试第 ${Math.min(progress.current + 1, progress.total)} 集...` : `正在生成第 ${Math.min(progress.current + 1, progress.total)} 集...`}
+            {statusMessage || (retrying ? `正在重试第 ${Math.min(progress.current + 1, progress.total)} 集...` : `正在生成第 ${Math.min(progress.current + 1, progress.total)} 集...`)}
           </p>
           <p className="text-xs text-slate-400">
-            {retrying ? '失败剧集将自动重试最多3次' : '您可以先浏览下方已生成的内容'}
+            {statusMessage ? '' : (retrying ? '失败剧集将自动重试最多3次' : '您可以先浏览下方已生成的内容')}
           </p>
 
           {onStop && (
