@@ -401,14 +401,13 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: '请先配置 DEEPSEEK_API_KEY 环境变量' })
     }
 
-    // 每生成一集扣1集额度（停止或关页面只扣已生成的）
+    // 先检查额度够不够，但不扣
     const user = await findById(req.user.id)
     if (!user) return res.status(404).json({ error: '用户不存在' })
     const remaining = getRemainingEpisodes(user)
     if (remaining < 1) {
       return res.status(403).json({ error: '额度不足，请充值', remainingEpisodes: 0, needPayment: true })
     }
-    await incrementEpisodes(req.user.id, 1)
 
     const text = await callDeepSeek(
       buildEpisodeSystemPrompt(),
@@ -423,6 +422,9 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
     const data = JSON.parse(jsonMatch[0])
     data.number = data.number || episodeNumber
     data.title = data.title || ''
+
+    // AI 返回有效内容后才扣费（重试不会重复扣）
+    await incrementEpisodes(req.user.id, 1)
 
     res.json({ success: true, data })
   } catch (error) {
