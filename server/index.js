@@ -306,7 +306,6 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
     if (remaining < episodeCount) {
       return res.status(403).json({ error: `额度不足，需要 ${episodeCount} 集，剩余 ${Math.max(0, remaining)} 集`, remainingEpisodes: Math.max(0, remaining), needPayment: true })
     }
-    await incrementEpisodes(req.user.id, episodeCount)
 
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
@@ -333,6 +332,8 @@ app.post('/api/generate', authMiddleware, async (req, res) => {
     }
 
     res.end()
+    // 流式传输完成后再扣费
+    incrementEpisodes(req.user.id, episodeCount).catch(e => console.error('扣费失败:', e))
   } catch (error) {
     console.error('生成失败:', error)
     if (!res.headersSent) {
@@ -425,13 +426,7 @@ app.post('/api/generate/episode', authMiddleware, async (req, res) => {
 
     // 先返回结果给前端，再扣费——避免用户刷新时扣了费但没拿到结果
     res.json({ success: true, data })
-    res.on('finish', async () => {
-      try {
-        await incrementEpisodes(req.user.id, 1)
-      } catch (e) {
-        console.error('扣费失败:', e)
-      }
-    })
+    incrementEpisodes(req.user.id, 1).catch(e => console.error('扣费失败:', e))
   } catch (error) {
     console.error('生成单集失败:', error)
     res.status(500).json({ error: `生成第${req.body.episodeNumber}集失败：` + (error.message || '未知错误') })

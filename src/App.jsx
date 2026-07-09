@@ -10,10 +10,9 @@ import HistoryList from './components/HistoryList.jsx'
 import LoginPage from './components/LoginPage.jsx'
 import TopUpPage from './components/TopUpPage.jsx'
 import AdminPage from './components/AdminPage.jsx'
-import { generateFramework, generateEpisode, abortGenerate } from './utils/api.js'
-import { parseScriptResult } from './utils/export.js'
+import { generateFramework, generateEpisode } from './utils/api.js'
 import { saveToHistory, isScriptComplete, getIncompleteCount } from './utils/history.js'
-import { getToken, getUser, clearAuth, refreshUserInfo } from './utils/auth.js'
+import { getToken, clearAuth, refreshUserInfo } from './utils/auth.js'
 
 const EPISODE_TIMEOUT = 45_000
 
@@ -340,14 +339,17 @@ function App() {
     const total = richResult.episodes.length
     const incompleteCount = getIncompleteCount(richResult)
     const freshUser = await refreshUserInfo()
-    if (freshUser) setUser(freshUser)
-
-    if (incompleteCount > 0 && (freshUser?.remainingEpisodes ?? 0) < incompleteCount) {
-      setError(`额度不足，需要 ${incompleteCount} 集额度，剩余 ${Math.max(0, freshUser?.remainingEpisodes ?? 0)} 集`)
-      setPhase(null)
-      setLoading(false)
-      abortRef.current = null
-      return
+    if (freshUser) {
+      setUser(freshUser)
+      // 只有成功获取到用户信息时才检查额度
+      const remaining = freshUser.remainingEpisodes ?? 0
+      if (incompleteCount > 0 && remaining < incompleteCount) {
+        setError(`额度不足，需要 ${incompleteCount} 集额度，剩余 ${remaining} 集`)
+        setPhase(null)
+        setLoading(false)
+        abortRef.current = null
+        return
+      }
     }
 
     setProgress({ current: 0, total })
