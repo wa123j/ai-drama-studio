@@ -69,10 +69,11 @@ ai-drama-studio/
 ## Key Architecture
 
 ### Generation Flow (two-phase)
-1. **Framework phase**: Call `/api/generate/framework` — gets title, characters, episode summaries. Deducts credit if enough remaining.
-2. **Episode phase**: Call `/api/generate/episode` per episode — generates detailed content (dialogue + scenes). **One credit deducted per successful episode**. Auto-retries up to 3 times on failure.
-3. Each episode success → `saveToHistory()` in localStorage for crash recovery.
-4. Incomplete scripts (from stop/crash) can be resumed from History with `handleContinueGenerate`.
+1. **Framework phase**: Call `/api/generate/framework` — gets title, characters, episode summaries. Checks remaining >= episodeCount (no deduction at framework stage).
+2. **Episode phase**: Call `/api/generate/episode` per episode — generates detailed content (dialogue + scenes). **One credit deducted AFTER successful AI response**, on `res.json()` callback, not before. Deduplication via `chargedSet` (userId + title + epNumber).
+3. **Timeout handling**: `EPISODE_TIMEOUT = 120_000` (120s). On timeout (AbortError), **frontend does NOT auto-retry** — marks as failed instead. This prevents double-charging when backend already succeeded but response timed out.
+4. Each episode success → `saveToHistory()` in localStorage for crash recovery.
+5. Incomplete scripts (from stop/crash or timeout) can be resumed from History with `handleContinueGenerate`.
 
 ### Credit System
 ```js
@@ -80,8 +81,10 @@ remaining = max(0, 10 + paidExtraEpisodes - totalEpisodes)
 ```
 - 10 free episodes per user
 - `paidExtraEpisodes` incremented by admin via `/api/admin/add-episodes`
-- `totalEpisodes` incremented each time a user generates (1 per episode in the new per-episode deduction mode)
+- `totalEpisodes` incremented 1 per successful AI episode response (on `res.json()` callback + dedup)
+- Framework stage: **checks but does NOT deduct** (deduction moved to per-episode stage)
 - Admin can reduce remaining via `/api/admin/reduce-episodes` (deducts from `paidExtraEpisodes`)
+- **Anti-double-charge**: Server maintains `chargedSet` (cleared every 30min) keyed by `userId:title:episodeNumber`
 
 ### Database (sql.js)
 - Pure JS SQLite, no native modules → works on Railway without build tools
@@ -151,8 +154,10 @@ start.bat            # Installs deps, starts backend + Vite dev
 - **Tailwind CSS v4** — uses `@import "tailwindcss"` syntax, `@theme` directive for custom colors (no `tailwind.config.js`)
 - **Chinese UI text** — all labels, errors, prompts are in Chinese (targeting Chinese users)
 - **Error handling**: all routes wrapped in try/catch; global `uncaughtException` / `unhandledRejection` handlers
-- **Component state**: `loading`, `error`, `phase` (`framework`/`episodes`/`complete`/`incomplete`), `progress`, `failedEpisodes`
+- **Component state**: `loading`, `error`, `phase` (`framework`/`episodes`/`complete`/`incomplete`), `progress`, `failedEpisodes`, `statusMessage` (for retry text, independent of phase)
 - **AbortController** pattern: each generation creates an AbortController, stored in `abortRef`, used by stop button
+- **No auto-retry on timeout**: AbortError from timeout does not trigger auto-retry — marked as failed to avoid double-charge
+- **Deduction timing**: `server/index.js` deducts episode credits AFTER `res.json()` via fire-and-forget `.catch()`
 
 ---
 
@@ -160,10 +165,11 @@ start.bat            # Installs deps, starts backend + Vite dev
 
 | Pattern | Where | Why |
 |---------|-------|-----|
-| Per-episode credit deduction | `server/index.js:390-410` | Stop/crash only charges for generated episodes |
-| Auto-retry 3x with backoff | `src/App.jsx:148-181` | Handle network fluctuations |
+| Per-episode credit deduction after AI success | `server/index.js:437-440` | `res.json()` first, then `incrementEpisodes` + `chargedSet` dedup |
+| No auto-retry on timeout | `src/App.jsx:177-181` | Timeout may have already deducted — retry would double-charge |
 | saveToHistory on each episode | `src/App.jsx:174` | Crash recovery — reopen page and continue |
 | Auth header via authFetch | `src/utils/auth.js:35-47` | Auto-attaches JWT Bearer token |
 | JSON extraction from AI | `server/index.js:325,362` | `text.match(/\{[\s\S]*\}/)` handles markdown-wrapped JSON |
 | Lightweight framework payload | `src/utils/api.js:54-63` | Only send summaries, not full content, to avoid token limit |
 | Film-style .bg-film background | `src/index.css:21-57` | Dark warm gradient + film perforation texture |
+| Dedup charge via chargedSet | `server/index.js:26-29,417-419,437-440` | Prevents double-charge from retries/refresh |
